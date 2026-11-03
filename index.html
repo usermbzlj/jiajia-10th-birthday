@@ -401,7 +401,7 @@ html.astro .reading-main{animation:none;opacity:0;visibility:hidden;pointer-even
 .sec-head h2{font-weight:600;font-size:clamp(28px,4.6vw,40px);letter-spacing:.4em;padding-left:.4em;color:var(--parch);line-height:1.3;text-wrap:balance}
 .sec-note{color:var(--soft);font-size:15px;letter-spacing:.06em;max-width:28em;line-height:1.85;text-wrap:balance;min-height:1.85em}
 .field{position:relative;width:100%;height:clamp(380px,60svh,560px);margin-top:6px;overflow-x:clip;overflow-clip-margin:14px;touch-action:pan-y;-webkit-user-select:none;user-select:none}
-.candle{position:absolute;left:var(--x);top:var(--y);width:calc(15px * var(--s));height:calc(var(--h) * var(--s) * 1px);translate:-50% 0;animation:bob var(--dur) ease-in-out var(--del) infinite alternate;transition:opacity .9s ease,filter .9s ease}
+.candle{position:absolute;left:var(--x);top:var(--y);width:calc(15px * var(--s));height:calc(var(--h) * var(--s) * 1px);translate:calc(-50% + var(--px,0) * var(--s) * 9px) calc(var(--py,0) * var(--s) * 5px);animation:bob var(--dur) ease-in-out var(--del) infinite alternate;transition:opacity .9s ease,filter .9s ease}
 .candle::before{content:"";position:absolute;inset:calc(-48px * var(--s)) -18px -8px}
 .candle.far{filter:blur(.6px) brightness(.8)}
 @keyframes bob{from{transform:translateY(-7px) rotate(-.7deg)}to{transform:translateY(7px) rotate(.7deg)}}
@@ -418,6 +418,7 @@ html.astro .reading-main{animation:none;opacity:0;visibility:hidden;pointer-even
 .candle.out .flame{transition:transform .22s ease-in,opacity .25s ease-in}
 .candle .flame i{position:absolute;inset:0;transform-origin:50% 100%;border-radius:50% 50% 50% 50%/62% 62% 38% 38%;filter:blur(.35px);background:radial-gradient(ellipse 50% 60% at 50% 72%,#fffef6 0%,#fff1bf 22%,#ffc35c 50%,rgba(255,140,40,.55) 70%,rgba(255,110,30,0) 86%);animation:flick var(--fl,1.6s) ease-in-out infinite}
 .candle .flame i::after{content:"";position:absolute;left:28%;right:28%;bottom:5%;height:22%;border-radius:50%;background:radial-gradient(rgba(110,150,255,.55),transparent 70%)}
+.candle .flame b{position:absolute;inset:0;transform-origin:50% 100%;transform:rotate(calc(var(--roll,0) * 1deg))}
 @keyframes flick{0%,100%{transform:scale(1,1) skewX(0)}25%{transform:scale(.93,1.07) skewX(2deg)}50%{transform:scale(1.05,.95) skewX(-1.5deg)}75%{transform:scale(.97,1.03) skewX(1deg)}}
 .candle .glow{position:absolute;left:50%;bottom:calc(100% + 16px * var(--s));width:calc(160px * var(--s));height:calc(160px * var(--s));translate:-50% 50%;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .8s ease;background:radial-gradient(closest-side,rgba(255,205,120,.34),rgba(255,170,80,.1) 45%,transparent)}
 .candle.lit .glow{opacity:calc(1 - var(--blow,0) * .7);animation:glowp 2.6s ease-in-out infinite alternate}
@@ -1155,26 +1156,54 @@ const sfx = {
   boom(){ noise(0, .9, {type:'lowpass', f:900, vol:.16, a:.005, f2:200}); thump(0, 70, .22); [88,91,95].forEach((m, i) => tone(mf(m + Math.floor(rand(-2, 3))), .05 + i * .04, .03, 1.2)); },
   song(){ if (!canPlay()) return; let t = .2; const beat = .42; HB.forEach(([m, b], i) => { tone(mf(m), t, .15, 2.2); if (HB_BASS[i]) tone(mf(HB_BASS[i]), t, .07, 2.6); t += b * beat; }); }
 };
-/* music box: an original arpeggio loop (Em, C, Am, B) */
-const MB = [[64,71,76,79,78,76],[60,67,72,76,74,72],[57,64,69,72,71,69],[59,66,69,75,71,66]];
-const music = { on: false, timer: 0, step: 0, next: 0 };
+/* music box: "Greensleeves", a traditional English tune from the 1500s (public domain) */
+const GS_BODY = [
+  [72,2],[74,1], [76,1.5],[77,.5],[76,1], [74,2],[71,1], [67,1.5],[69,.5],[71,1],
+  [72,2],[69,1], [69,1.5],[68,.5],[69,1], [71,2],[68,1], [64,2],[69,1],
+  [72,2],[74,1], [76,1.5],[77,.5],[76,1], [74,2],[71,1], [67,1.5],[69,.5],[71,1],
+  [72,1.5],[71,.5],[69,1], [68,1.5],[66,.5],[68,1], [69,3], [0,3],
+  [79,3], [79,1.5],[78,.5],[76,1], [74,2],[71,1], [67,1.5],[69,.5],[71,1],
+  [72,2],[69,1], [69,1.5],[68,.5],[69,1], [71,2],[68,1], [64,3],
+  [79,3], [79,1.5],[78,.5],[76,1], [74,2],[71,1], [67,1.5],[69,.5],[71,1],
+  [72,1.5],[71,.5],[69,1], [68,1.5],[66,.5],[68,1], [69,3], [0,2],[69,1]
+];
+const GS_CHORDS = 'Am Am G G F E E E Am Am G G Am E Am Am C C G G Am E E E C C G G Am E Am Am'.split(' ');
+const CHORD = { Am: [45, 52], G: [43, 50], F: [41, 48], E: [40, 47], C: [48, 55] };
+const GS = (() => { const mel = []; let t = 0; GS_BODY.forEach(([m, d]) => { if (m) mel.push([t, m, d]); t += d; }); return { mel, ch: GS_CHORDS.map((c, i) => [i * 3, c]), len: t }; })();
+const GS_U = .26;
+const music = { on: false, timer: 0, loop0: 0, mi: 0, ci: 0, pauseUntil: 0, introduced: false };
+function pluck(f, at, vol, dec){ tone(f, at, vol, dec); noise(at, .03, { type: 'highpass', f: 5200, vol: vol * .22, a: .002 }); }
+function musicStart(){ const c = A.ctx; music.loop0 = c.currentTime + .2 + GS_U; music.mi = 0; music.ci = 0; pluck(mf(81), .2, .05, 1.2); }
 function musicTick(){
   if (!music.on || !A.ctx) return;
   const c = A.ctx;
-  while (music.next < c.currentTime + .25){
-    const bar = Math.floor(music.step / 6) % 4, n = music.step % 6, at = Math.max(0, music.next - c.currentTime);
-    tone(mf(MB[bar][n] + 12), at, n === 3 ? .055 : .042, 2.4);
-    if (n === 0) tone(mf(MB[bar][0] - 12), at, .04, 3);
-    music.step++; music.next += .34;
+  if (music.pauseUntil){
+    if (c.currentTime < music.pauseUntil){ music.timer = setTimeout(musicTick, 150); return; }
+    music.pauseUntil = 0; musicStart();
   }
-  music.timer = setTimeout(musicTick, 90);
+  const horizon = c.currentTime + .3;
+  for (let guard = 0; guard < 64; guard++){
+    const nm = music.mi < GS.mel.length ? music.loop0 + GS.mel[music.mi][0] * GS_U : Infinity;
+    const nc = music.ci < GS.ch.length ? music.loop0 + GS.ch[music.ci][0] * GS_U : Infinity;
+    if (nm === Infinity && nc === Infinity){ music.loop0 += GS.len * GS_U; music.mi = 0; music.ci = 0; continue; }
+    const nt = Math.min(nm, nc);
+    if (nt > horizon) break;
+    const at = Math.max(0, nt - c.currentTime + rand(-.005, .005));
+    if (nm <= nc){ const [, m, d] = GS.mel[music.mi++]; pluck(mf(m + 12), at, .052, Math.min(2.8, .9 + d * GS_U * 2)); }
+    else { const [r, f] = CHORD[GS.ch[music.ci++][1]]; tone(mf(r + 12), at, .034, 2.6); tone(mf(f + 12), at + .015, .02, 1.9); }
+  }
+  music.timer = setTimeout(musicTick, 100);
 }
 const musicBtn = $('#musicBtn'), muteBtn = $('#muteBtn');
 function setMusic(on){
   audioInit(); music.on = on && !!A.ctx;
   musicBtn.setAttribute('aria-pressed', String(music.on));
   clearTimeout(music.timer);
-  if (music.on){ if (A.muted) setMuted(false); music.next = A.ctx.currentTime + .05; musicTick(); }
+  if (music.on){
+    if (A.muted) setMuted(false);
+    music.pauseUntil = 0; musicStart(); musicTick();
+    if (!music.introduced){ music.introduced = true; caption('八音盒', 'Greensleeves', '《绿袖子》，四百多年前的英格兰老歌。'); }
+  }
 }
 function setMuted(m){
   A.muted = m; store.set('muted', m);
@@ -1193,6 +1222,7 @@ const sky = $('#sky'), sg = sky.getContext('2d');
 const fxc = $('#fx'), fg = fxc.getContext('2d');
 let W = 0, H = 0, DPR = 1, lastW = -1, castle = null, castleCx = 0, moon = null, skyGrad = null, mistGrad = null;
 let windows = [], lumosAmt = 0, warmAmt = 0, astroK = 0, T = 0, frozen = false;
+const par = { x: 0, y: 0 };
 const ptr = { x: 0, y: 0, has: false, lx: 0, ly: 0 };
 const stars = Array.from({ length: 230 }, () => ({ x: Math.random(), y: Math.pow(Math.random(), 1.35) * .8, r: Math.random() < .06 ? rand(1, 1.5) : rand(.3, .95), p: rand(0, 6.28), s: rand(.4, 1.6), a: rand(.35, .95) }));
 const motes = Array.from({ length: 22 }, () => ({ x: Math.random(), y: Math.random(), v: rand(.006, .016), r: rand(.6, 1.5), p: rand(0, 6.28) }));
@@ -1282,11 +1312,11 @@ function drawSky(t, dt){
   const g = sg;
   g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
   g.fillStyle = skyGrad; g.fillRect(0, 0, W, H);
-  if (moon) g.drawImage(moon.c, moon.x - moon.s / 2, moon.y - moon.s / 2, moon.s, moon.s);
+  if (moon) g.drawImage(moon.c, moon.x - moon.s / 2 - par.x * 10, moon.y - moon.s / 2 - par.y * 6, moon.s, moon.s);
   g.fillStyle = '#f4eedc';
   for (const s of stars){
     g.globalAlpha = s.a * (.55 + .45 * Math.sin(t * s.s + s.p)) * (1 - astroK * .35);
-    const x = s.x * W, y = s.y * H;
+    const x = s.x * W - par.x * (2 + s.r * 8), y = s.y * H - par.y * (1.5 + s.r * 5);
     if (s.r > 1){ g.fillRect(x - s.r * 2.4, y - .25, s.r * 4.8, .5); g.fillRect(x - .25, y - s.r * 2.4, .5, s.r * 4.8); }
     g.beginPath(); g.arc(x, y, s.r, 0, 6.2832); g.fill();
   }
@@ -1419,7 +1449,7 @@ function updateFx(dt){
   if (nameStars.length && astroK > .01){
     for (const s of nameStars){
       s.t += dt; const k = clamp((s.t - s.delay) / 2.4, 0, 1), e = ease(k);
-      const x = s.sx + (s.x - s.sx) * e, y = s.sy + (s.y - s.sy) * e;
+      const x = s.sx + (s.x - s.sx) * e - par.x * 6, y = s.sy + (s.y - s.sy) * e - par.y * 4;
       const tw = .6 + .4 * Math.sin(T * s.sp + s.ph), sz = s.r * (1 + (1 - k) * .6) * 4;
       fg.globalAlpha = (k > 0 ? .25 + .75 * k : 0) * tw; fg.drawImage(SPR.gold, x - sz, y - sz, sz * 2, sz * 2);
     }
@@ -1486,6 +1516,7 @@ function hint(txt){
   hintTimer = setTimeout(() => { hintEl.textContent = txt; hintEl.classList.toggle('fade', !txt); }, 320);
 }
 function flip(){
+  askGyro();
   if (state.phase !== 'front') return;
   audioInit(); sfx.flip(); buzz(8);
   state.phase = 'flipping'; hint('');
@@ -1816,7 +1847,7 @@ const candles = CANDLES.map((c, i) => {
   b.type = 'button'; b.className = 'candle' + (c.s < .75 ? ' far' : '');
   b.setAttribute('aria-label', `点亮第 ${i + 1} 根蜡烛`);
   b.style.cssText = `--x:${c.x}%;--y:${c.y}%;--s:${c.s};--h:${c.h};--dur:${rand(4.6, 7.4).toFixed(2)}s;--del:${(-rand(0, 6)).toFixed(2)}s;--fl:${rand(1.2, 2).toFixed(2)}s;--dp:${rand(8, 58).toFixed(0)}%;--dl:${rand(14, 34).toFixed(0)}%;z-index:${Math.round(c.s * 10)}`;
-  b.innerHTML = '<span class="glow"></span><span class="flame"><i></i></span><span class="wick"></span><span class="wax"></span>';
+  b.innerHTML = '<span class="glow"></span><span class="flame"><b><i></i></b></span><span class="wick"></span><span class="wax"></span>';
   b.addEventListener('click', () => tapCandle(i));
   field.insertBefore(b, finale);
   return { el: b, lit: false };
@@ -1987,6 +2018,7 @@ async function blowComplete(){
   await wait(1400);
   if (wishPhase !== 'done') return;
   field.classList.add('dim'); finale.hidden = false;
+  if (music.on && A.ctx) music.pauseUntil = A.ctx.currentTime + 12.5;
   celebrate(); sfx.song(); buzz([20, 60, 20]);
   setTimeout(() => { if (wishPhase === 'done' && state.phase === 'reading' && !astroOn) startSnitch(); }, 5200);
 }
@@ -2275,7 +2307,7 @@ const SPELLS = [
       state.lumos = true;
       if (state.phase === 'reading' && !inkShown){ if (!inView(inkWrap)) inkWrap.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'center' }); setTimeout(() => revealInk(true), 500); suggest('nox', 9000); return '魔杖尖亮了，隐形墨水显了出来。'; }
       suggest('nox', 7000);
-      return '魔杖尖亮了。念「诺克斯」可以收回去。'; } },
+      return gyro.on ? '魔杖尖亮了。转动手机，光会跟着走。' : '魔杖尖亮了。念「诺克斯」可以收回去。'; } },
   { id:'nox', cn:'诺克斯', la:'Nox', riddle:'「荧光闪烁」的反义词，把光收回去。', part:'诺＿＿', lat:'N…', keys:['nox','诺克斯','荧光熄灭'], run(){
       unsuggest('nox');
       if (state.lumos){ state.lumos = false; return '光收回去了。'; }
@@ -2439,6 +2471,52 @@ if ('IntersectionObserver' in window){
   map.forEach((v, el) => io.observe(el));
 }
 
+/* ================= gyroscope ================= */
+const gyro = { on: false, asked: false, x: 0, y: 0, roll: 0, rollS: 0, bx: null, by: 0 };
+function onOrient(e){
+  if (e.beta == null || e.gamma == null) return;
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+  const r = Math.cos(b) * Math.sin(g), d = Math.sin(b);
+  let a = 0;
+  if (screen.orientation && typeof screen.orientation.angle === 'number') a = screen.orientation.angle;
+  else if (typeof window.orientation === 'number') a = window.orientation;
+  a = a * Math.PI / 180;
+  const sr = r * Math.cos(a) + d * Math.sin(a), sd = -r * Math.sin(a) + d * Math.cos(a);
+  const fade = clamp((Math.hypot(sr, sd) - .25) / .35, 0, 1);
+  gyro.roll = clamp(-Math.atan2(sr, sd) * 180 / Math.PI, -40, 40) * fade;
+  if (gyro.bx == null){ gyro.bx = sr; gyro.by = sd; }
+  gyro.bx += (sr - gyro.bx) * .01; gyro.by += (sd - gyro.by) * .01;
+  gyro.x = clamp((sr - gyro.bx) / .3, -1, 1); gyro.y = clamp((sd - gyro.by) / .3, -1, 1);
+  gyro.on = true;
+}
+function askGyro(){
+  if (gyro.asked || !COARSE) return;
+  const DOE = window.DeviceOrientationEvent;
+  if (!DOE) return;
+  gyro.asked = true;
+  if (typeof DOE.requestPermission === 'function'){
+    try { DOE.requestPermission().then(res => { if (res === 'granted') window.addEventListener('deviceorientation', onOrient); }).catch(() => {}); } catch (e) {}
+  }
+}
+if (window.DeviceOrientationEvent && COARSE) window.addEventListener('deviceorientation', onOrient);
+window.addEventListener('click', askGyro, { passive: true });
+function updateMotion(dt){
+  let tx = 0, ty = 0;
+  if (gyro.on){ tx = gyro.x; ty = gyro.y; }
+  else if (ptr.has && !COARSE){ tx = (ptr.x / W - .5) * 1.2; ty = (ptr.y / H - .5) * 1.2; }
+  const k = Math.min(1, dt * 4);
+  par.x += (tx - par.x) * k; par.y += (ty - par.y) * k;
+  gyro.rollS += (gyro.roll - gyro.rollS) * Math.min(1, dt * 6);
+  if (gyro.on){
+    if (!root.classList.contains('reading')){ tilt.tx = -gyro.x; tilt.ty = -gyro.y; }
+    if (state.lumos){ ptr.x = W / 2 + gyro.x * W * .38; ptr.y = H * .42 + gyro.y * H * .3; ptr.has = true; }
+  }
+  if (root.classList.contains('reading')){
+    field.style.setProperty('--px', (-par.x).toFixed(3)); field.style.setProperty('--py', (-par.y).toFixed(3));
+    field.style.setProperty('--roll', gyro.rollS.toFixed(2));
+  }
+}
+
 /* ================= global input ================= */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape'){ if (closeBook()) return; if (closeNote()) return; if (astroOn) exitAstro(false); return; }
@@ -2472,7 +2550,7 @@ function loop(now){
   if (!frozen && !document.hidden){
     T += dt;
     lumosAmt += ((state.lumos ? 1 : 0) - lumosAmt) * Math.min(1, dt * 3);
-    drawSky(T, dt); updateFx(dt); updateLev(dt); updateSnitch(dt); updateTilt(); updateMic(dt);
+    updateMotion(dt); drawSky(T, dt); updateFx(dt); updateLev(dt); updateSnitch(dt); updateTilt(); updateMic(dt);
   }
   requestAnimationFrame(loop);
 }
